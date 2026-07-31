@@ -3,23 +3,21 @@
   "inbounds": [{
     "port": "${SOCKS_PORT}",
     "protocol": "http",
-    "settings": {}
+    "settings": {},
+    "tag": "http-in"
   }],
-  "outbounds": [{
-    "protocol": "vless",
-    "settings": {"vnext": [{
-      "address": "${REMOTE_ADDR}",
-      "port": ${REMOTE_PORT},
-      "users": [{"id": "${UUID}", "encryption": "none"}]
-    }]},
-    "streamSettings": {
-      "network": "ws",
-      "security": "tls",
-      "wsSettings": {"path": "${PATH_WS}"},
-      "tlsSettings": {
-        "serverName": "${SNI}",
-        "fingerprint": "${FINGERPRINT}"
-      }
-    }
-  }]
+  "outbounds": [
+    ${OUTBOUNDS}
+  ],
+  "routing": {
+    "rules": [{
+      "type": "field",
+      "inboundTag": ["http-in"],
+      "balancerTag": "vless-pool"
+    }],
+    "balancers": [{
+      "tag": "vless-pool",
+      "selector": ["${OUTBOUND_TAGS}"]
+    }]
+  }
 }
