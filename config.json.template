@@ -1,0 +1,25 @@
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [{
+    "port": "${SOCKS_PORT}",
+    "protocol": "socks",
+    "settings": {"auth": "noauth", "udp": true}
+  }],
+  "outbounds": [{
+    "protocol": "vless",
+    "settings": {"vnext": [{
+      "address": "${REMOTE_ADDR}",
+      "port": ${REMOTE_PORT},
+      "users": [{"id": "${UUID}", "encryption": "none"}]
+    }]},
+    "streamSettings": {
+      "network": "ws",
+      "security": "tls",
+      "wsSettings": {"path": "${PATH_WS}"},
+      "tlsSettings": {
+        "serverName": "${SNI}",
+        "fingerprint": "${FINGERPRINT}"
+      }
+    }
+  }]
+}
