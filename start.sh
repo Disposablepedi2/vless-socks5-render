@@ -1,51 +1,46 @@
 #!/bin/bash
+export SOCKS_PORT="${PORT:-1080}"
 export SNI="${SNI:-ganderrice.gander-rice-kindle.workers.dev}"
 export FINGERPRINT="${FINGERPRINT:-chrome}"
-export SOCKS_PORT="${PORT:-1080}"
+export CFG="${VLESS_CONFIGS:-[]}"
 
-# Read VLESS configs from env (VLESS_CONFIGS is a JSON array of {addr,port,id,path} objects)
-CONFIGS="${VLESS_CONFIGS:-[]}"
-
-# Generate outbound blocks
-python3 << PYEOF
+python3 -c "
 import json, os
 
-configs = json.loads(os.environ.get('VLESS_CONFIGS', '[]'))
-sni = os.environ.get('SNI', 'ganderrice.gander-rice-kindle.workers.dev')
-fp = os.environ.get('FINGERPRINT', 'chrome')
+cfgs = json.loads(os.environ.get('CFG','[]'))
+sni = os.environ['SNI']
+fp = os.environ['FINGERPRINT']
+port = os.environ['SOCKS_PORT']
 
 outbounds = []
 tags = []
-
-for i, cfg in enumerate(configs):
-    tag = f"vless-{i}"
+for i, c in enumerate(cfgs):
+    tag = f'vless-{i}'
     tags.append(tag)
-    ob = {
-        "protocol": "vless",
-        "tag": tag,
-        "settings": {"vnext": [{
-            "address": cfg["addr"],
-            "port": int(cfg.get("port", 443)),
-            "users": [{"id": cfg["id"], "encryption": "none"}]
+    outbounds.append({
+        'protocol': 'vless', 'tag': tag,
+        'settings': {'vnext': [{
+            'address': c['addr'], 'port': int(c.get('port',443)),
+            'users': [{'id': c['id'], 'encryption': 'none'}]
         }]},
-        "streamSettings": {
-            "network": "ws",
-            "security": "tls",
-            "wsSettings": {"path": cfg["path"]},
-            "tlsSettings": {
-                "serverName": sni,
-                "fingerprint": fp
-            }
+        'streamSettings': {
+            'network': 'ws', 'security': 'tls',
+            'wsSettings': {'path': c['path']},
+            'tlsSettings': {'serverName': sni, 'fingerprint': fp}
         }
+    })
+
+config = {
+    'log': {'loglevel': 'warning'},
+    'inbounds': [{'port': port, 'protocol': 'http', 'tag': 'http-in', 'settings': {}}],
+    'outbounds': outbounds,
+    'routing': {
+        'rules': [{'type': 'field', 'inboundTag': ['http-in'], 'balancerTag': 'vless-pool'}],
+        'balancers': [{'tag': 'vless-pool', 'selector': tags}]
     }
-    outbounds.append(ob)
-
-# Add direct outbound as fallback
-outbounds.append({"protocol": "freedom", "tag": "direct"})
-
-print(json.dumps(outbounds, indent=2))
-print("---TAGS---")
-print(",".join(tags))
-PYEOF
-echo "Generated config"
+}
+with open('/etc/xray/config.json','w') as f:
+    json.dump(config, f, indent=2)
+print(f'Generated {len(tags)} VLESS outbounds → SOCKS5:{port}')
+" 2>&1
 exec /usr/bin/xray run -c /etc/xray/config.json
